@@ -26,8 +26,8 @@ EXPOSE 8000
 
 # Development target with hot reload
 FROM base AS dev
-CMD dbmate up && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+CMD ["sh", "-c", "dbmate up && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
 
 # Production target
 FROM base AS prod
-CMD dbmate up && fastapi run app/main.py --port 8000
+CMD ["sh", "-c", "dbmate up && fastapi run app/main.py --port 8000"]
