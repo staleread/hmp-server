@@ -6,7 +6,6 @@ The private key is encrypted with a password and generates SQL to insert into da
 
 import sys
 import secrets
-import getpass
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -61,11 +60,7 @@ def main():
     print()
 
     # Get password
-    password = getpass.getpass("Enter password to encrypt private key: ")
-    confirm_password = getpass.getpass("Confirm password: ")
-    if password != confirm_password:
-        print("Error: Passwords do not match")
-        sys.exit(1)
+    password = input("Enter password to encrypt private key: ").strip()
 
     if not password:
         print("Error: Password cannot be empty")
