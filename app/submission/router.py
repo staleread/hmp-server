@@ -19,7 +19,7 @@ router = APIRouter()
 @audit()
 @authorize(AccessLevel.RESTRICTED)
 async def create_submission(
-    body: Annotated[bytes, Body()],
+    body: Annotated[bytes, Body(media_type="application/cbor")],
     db: PostgresRunnerDep,
     subject: CurrentSubjectDep,
     request: Request,

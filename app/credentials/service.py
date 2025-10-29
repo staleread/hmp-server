@@ -47,10 +47,9 @@ def load_server_private_key(*, db: SqlRunner) -> Ed25519PrivateKey:
 
 
 def get_public_key(*, db: SqlRunner) -> PublicKeyResponse:
-    """Get the server's public key for encrypting data."""
     private_key = load_server_private_key(db=db)
-    print("FIZZ: were good", private_key)
     public_key_bytes = private_key.public_key().public_bytes_raw()
+
     return PublicKeyResponse(
         public_key=base64.b64encode(public_key_bytes).decode("utf-8")
     )

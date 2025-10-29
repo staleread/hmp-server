@@ -1,21 +1,14 @@
-import base64
+import cbor2
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response
 
 from app.shared.dependencies.db import PostgresRunnerDep
 from app.auth.dependencies import CurrentSubjectDep
 from app.auth.enums import AccessLevel
 from app.auth.decorators import authorize
 from app.audit.decorators import audit
-from app.credentials.service import load_server_private_key
-from app.shared.utils.crypto import (
-    generate_aes_key,
-    encrypt_with_aes,
-    decrypt_with_aes,
-    encrypt_with_ed25519_public_key,
-    decrypt_with_ed25519_private_key,
-)
 
-from .dto import UploadKeyResponse, PdfToAudioRequest, PdfToAudioResponse
+from .dto import UploadKeyResponse
 from . import service as pdf_service
 
 router = APIRouter()
@@ -27,124 +20,38 @@ router = APIRouter()
 async def read_upload_key(
     db: PostgresRunnerDep, subject: CurrentSubjectDep, request: Request
 ) -> UploadKeyResponse:
-    """
-    Generate an AES key, encrypt it with user's public key, and return it.
-    The client will use this key to encrypt the PDF file.
-    """
-    user_public_key_row = (
-        db.query("""
-        SELECT public_key
-        FROM users
-        WHERE id = :user_id
-    """)
-        .bind(user_id=subject.id)
-        .first_row()
-    )
-
-    if not user_public_key_row or not user_public_key_row["public_key"]:
+    try:
+        result = pdf_service.generate_upload_key(user_id=subject.id, db=db)
+        return UploadKeyResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
         raise HTTPException(
-            status_code=400, detail="User public key not found in database"
+            status_code=500, detail=f"Failed to generate upload key: {str(e)}"
         )
-
-    user_public_key_bytes = bytes(user_public_key_row["public_key"])
-
-    # Generate AES key (32 bytes for AES-256)
-    aes_key = generate_aes_key()
-
-    # Encrypt AES key with user's public key
-    encrypted_aes_key = encrypt_with_ed25519_public_key(aes_key, user_public_key_bytes)
-
-    return UploadKeyResponse(
-        encrypted_aes_key=base64.b64encode(encrypted_aes_key).decode("utf-8")
-    )
 
 
 @router.post("/execute")
 @audit()
 @authorize(AccessLevel.RESTRICTED)
 async def execute_pdf_to_audio(
-    req: PdfToAudioRequest,
     db: PostgresRunnerDep,
     subject: CurrentSubjectDep,
     request: Request,
-) -> PdfToAudioResponse:
-    """
-    Receive encrypted PDF, decrypt it, convert to audio, encrypt audio, and return.
-
-    Process:
-    1. Decrypt the AES key using server's private key
-    2. Decrypt the PDF file using the AES key
-    3. Extract text from PDF
-    4. Convert text to audio
-    5. Generate new AES key for audio
-    6. Encrypt audio with new key
-    7. Encrypt the new key with user's public key
-    8. Return encrypted audio and encrypted key
-    """
+):
     try:
-        server_private_key = load_server_private_key(db=db)
+        raw = await request.body()
+        data = cbor2.loads(raw)
 
-        # Decode from base64
-        encrypted_file_bytes = base64.b64decode(req.encrypted_file)
-        encrypted_aes_key_bytes = base64.b64decode(req.encrypted_aes_key)
-
-        # Decrypt AES key using server's private key
-        aes_key = decrypt_with_ed25519_private_key(
-            encrypted_aes_key_bytes, server_private_key
+        result = pdf_service.convert_pdf_to_audio_bytes(
+            cbor_data=data, user_id=subject.id, db=db
         )
 
-        # Decrypt PDF file
-        pdf_bytes = decrypt_with_aes(encrypted_file_bytes, aes_key)
-
-        # Extract text from PDF
-        text = pdf_service.extract_text_from_pdf(pdf_bytes)
-
-        if not text.strip():
-            raise HTTPException(
-                status_code=400, detail="No text found in PDF or PDF is empty"
-            )
-
-        # Convert text to audio
-        audio_bytes = pdf_service.convert_text_to_audio(text, speed=req.speed)
-
-        # Generate new AES key for audio encryption
-        audio_aes_key = generate_aes_key()
-
-        # Encrypt audio with new AES key
-        encrypted_audio = encrypt_with_aes(audio_bytes, audio_aes_key)
-
-        # Get user's public key for encrypting the audio AES key
-        user_public_key_row = (
-            db.query("""
-            SELECT public_key
-            FROM users
-            WHERE id = :user_id
-        """)
-            .bind(user_id=subject.id)
-            .first_row()
-        )
-
-        if not user_public_key_row or not user_public_key_row["public_key"]:
-            raise HTTPException(
-                status_code=400, detail="User public key not found in database"
-            )
-
-        user_public_key_bytes = bytes(user_public_key_row["public_key"])
-
-        # Encrypt audio AES key with user's public key
-        encrypted_audio_aes_key = encrypt_with_ed25519_public_key(
-            audio_aes_key, user_public_key_bytes
-        )
-
-        return PdfToAudioResponse(
-            encrypted_audio=base64.b64encode(encrypted_audio).decode("utf-8"),
-            encrypted_audio_key=base64.b64encode(encrypted_audio_aes_key).decode(
-                "utf-8"
-            ),
-        )
-
+        return Response(content=cbor2.dumps(result), media_type="application/cbor")
+    except (KeyError, cbor2.CBORDecodeError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid CBOR data: {str(e)}")
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Decryption error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"PDF to audio conversion failed: {str(e)}"
