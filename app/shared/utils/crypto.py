@@ -1,4 +1,3 @@
-from pathlib import Path
 import secrets
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -7,47 +6,6 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
-
-
-def load_server_private_key(password: str) -> Ed25519PrivateKey:
-    """
-    Load and decrypt the server's private key from encrypted file.
-    Uses hardcoded path: secrets/private_key.bin
-
-    Format: [salt(16B) | iv(12B) | ciphertext(N) | tag(16B)]
-    """
-    current_dir = Path(__file__).parent
-    root_dir = current_dir.parent.parent.parent
-
-    key_path = root_dir / "secrets/private_key.bin"
-
-    with open(key_path, "rb") as f:
-        data = f.read()
-
-    if len(data) < 16 + 12 + 16:
-        raise ValueError("Corrupted key file: too short")
-
-    salt = data[:16]
-    iv = data[16:28]
-    tag = data[-16:]
-    ciphertext = data[28:-16]
-
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=65536,
-        backend=default_backend(),
-    )
-    key = kdf.derive(password.encode("utf-8"))
-
-    decryptor = Cipher(
-        algorithms.AES(key), modes.GCM(iv, tag), backend=default_backend()
-    ).decryptor()
-
-    private_key_bytes = decryptor.update(ciphertext) + decryptor.finalize()
-
-    return Ed25519PrivateKey.from_private_bytes(private_key_bytes)
 
 
 def generate_aes_key() -> bytes:

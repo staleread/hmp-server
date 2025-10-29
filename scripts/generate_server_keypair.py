@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
 Script to generate server-side Ed25519 key pair for secure file transfers.
-The private key is encrypted with a password and stored in secrets folder.
-The public key is saved to the client folder for encryption purposes.
+The private key is encrypted with a password and generates SQL to insert into database.
 """
 
-import os
 import sys
 import secrets
-import argparse
+import getpass
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -16,14 +14,12 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 
-def save_encrypted_private_key(
-    private_key_bytes: bytes, output_path: str, password: str
-) -> None:
+def encrypt_private_key(private_key_bytes: bytes, password: str) -> bytes:
     """
-    Encrypt private_key_bytes with password (PBKDF2 + AES-256-GCM)
-    and save to output_path as binary file.
+    Encrypt private_key_bytes with password (PBKDF2 + AES-256-GCM).
 
     Format: [salt(16B) | iv(12B) | ciphertext(N) | tag(16B)]
+    Returns the encrypted data as bytes.
     """
     salt = secrets.token_bytes(16)
     kdf = PBKDF2HMAC(
@@ -44,89 +40,64 @@ def save_encrypted_private_key(
 
     encrypted_data = salt + iv + ciphertext + encryptor.tag
 
-    with open(output_path, "wb") as f:
-        f.write(encrypted_data)
+    return encrypted_data
 
 
-def save_public_key(public_key_bytes: bytes, output_path: str) -> None:
-    """Save raw public key bytes to file."""
-    with open(output_path, "wb") as f:
-        f.write(public_key_bytes)
+def generate_sql_statement(encrypted_key: bytes) -> str:
+    """Generate SQL INSERT statement for storing encrypted private key."""
+    sql = f"""INSERT INTO secrets (name, content)
+VALUES (
+    'server_private_key',
+    '\\x{encrypted_key.hex()}'
+)
+ON CONFLICT (name) DO UPDATE SET content = EXCLUDED.content;"""
+    return sql
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Generate Ed25519 key pair for server-side secure file transfers"
-    )
-    parser.add_argument(
-        "--private-key-path",
-        default="secrets/server_private_key.enc",
-        help="Path to save encrypted private key (default: secrets/server_private_key.enc)",
-    )
-    parser.add_argument(
-        "--public-key-path",
-        required=True,
-        help="Path to save public key (typically in client folder)",
-    )
-    parser.add_argument(
-        "--password",
-        help="Password to encrypt private key (if not provided, will prompt)",
-    )
-
-    args = parser.parse_args()
-
-    # Generate Ed25519 key pair
-    print("Generating Ed25519 key pair...")
-    private_key = Ed25519PrivateKey.generate()
-    public_key = private_key.public_key()
-
-    private_key_bytes = private_key.private_bytes_raw()
-    public_key_bytes = public_key.public_bytes_raw()
+    print("=" * 60)
+    print("Server Key Pair Generator")
+    print("=" * 60)
+    print()
 
     # Get password
-    if args.password:
-        password = args.password
-    else:
-        import getpass
-
-        password = getpass.getpass("Enter password to encrypt private key: ")
-        confirm_password = getpass.getpass("Confirm password: ")
-        if password != confirm_password:
-            print("Error: Passwords do not match")
-            sys.exit(1)
+    password = getpass.getpass("Enter password to encrypt private key: ")
+    confirm_password = getpass.getpass("Confirm password: ")
+    if password != confirm_password:
+        print("Error: Passwords do not match")
+        sys.exit(1)
 
     if not password:
         print("Error: Password cannot be empty")
         sys.exit(1)
 
-    # Ensure directories exist
-    private_key_dir = os.path.dirname(args.private_key_path)
-    if private_key_dir and not os.path.exists(private_key_dir):
-        os.makedirs(private_key_dir)
+    # Generate Ed25519 key pair
+    print()
+    print("Generating Ed25519 key pair...")
+    private_key = Ed25519PrivateKey.generate()
 
-    public_key_dir = os.path.dirname(args.public_key_path)
-    if public_key_dir and not os.path.exists(public_key_dir):
-        os.makedirs(public_key_dir)
+    private_key_bytes = private_key.private_bytes_raw()
 
-    # Save encrypted private key
-    print(f"Saving encrypted private key to: {args.private_key_path}")
-    save_encrypted_private_key(private_key_bytes, args.private_key_path, password)
+    # Encrypt private key
+    encrypted_key = encrypt_private_key(private_key_bytes, password)
 
-    # Save public key
-    print(f"Saving public key to: {args.public_key_path}")
-    save_public_key(public_key_bytes, args.public_key_path)
+    # Generate SQL
+    sql = generate_sql_statement(encrypted_key)
 
     print()
     print("=" * 60)
-    print("Key pair generated successfully!")
+    print("GENERATED SQL STATEMENT:")
     print("=" * 60)
-    print(f"Private key (encrypted): {args.private_key_path}")
-    print(f"Public key: {args.public_key_path}")
+    print(sql)
     print()
-    print("Next steps:")
-    print("1. Add SERVER_PRIVATE_KEY_PASSWORD to your .env file")
-    print("2. Add SERVER_PRIVATE_KEY_PASSWORD to docker-compose.yaml")
-    print("3. Distribute the public key to clients for file encryption")
+
+    print("=" * 60)
+    print("INSTRUCTIONS:")
+    print("=" * 60)
+    print("1. Run the SQL statement above against your database")
+    print("2. Set SERVER_PRIVATE_KEY_PASSWORD environment variable with the password")
+    print("3. The server will load the private key from the database on startup")
+    print("4. Clients will fetch the public key from the /public-key endpoint")
 
 
 if __name__ == "__main__":

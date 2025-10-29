@@ -1,15 +1,13 @@
 import base64
 from fastapi import APIRouter, HTTPException, Request
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app.shared.dependencies.db import PostgresRunnerDep
 from app.auth.dependencies import CurrentSubjectDep
 from app.auth.enums import AccessLevel
 from app.auth.decorators import authorize
 from app.audit.decorators import audit
-from app.shared.config.env import env_settings
+from app.credentials.service import load_server_private_key
 from app.shared.utils.crypto import (
-    load_server_private_key,
     generate_aes_key,
     encrypt_with_aes,
     decrypt_with_aes,
@@ -22,15 +20,6 @@ from . import service as pdf_service
 
 router = APIRouter()
 
-# Load server private key on module initialization
-SERVER_PRIVATE_KEY: Ed25519PrivateKey | None = None
-try:
-    SERVER_PRIVATE_KEY = load_server_private_key(
-        env_settings.server_private_key_password
-    )
-except Exception as e:
-    print(f"Warning: Could not load server private key: {e}")
-
 
 @router.get("/upload-key")
 @audit()
@@ -42,10 +31,6 @@ async def read_upload_key(
     Generate an AES key, encrypt it with user's public key, and return it.
     The client will use this key to encrypt the PDF file.
     """
-    if not SERVER_PRIVATE_KEY:
-        raise HTTPException(status_code=500, detail="Server private key not configured")
-
-    # Get user's public key from database
     user_public_key_row = (
         db.query("""
         SELECT public_key
@@ -96,17 +81,16 @@ async def execute_pdf_to_audio(
     7. Encrypt the new key with user's public key
     8. Return encrypted audio and encrypted key
     """
-    if not SERVER_PRIVATE_KEY:
-        raise HTTPException(status_code=500, detail="Server private key not configured")
-
     try:
+        server_private_key = load_server_private_key(db=db)
+
         # Decode from base64
         encrypted_file_bytes = base64.b64decode(req.encrypted_file)
         encrypted_aes_key_bytes = base64.b64decode(req.encrypted_aes_key)
 
         # Decrypt AES key using server's private key
         aes_key = decrypt_with_ed25519_private_key(
-            encrypted_aes_key_bytes, SERVER_PRIVATE_KEY
+            encrypted_aes_key_bytes, server_private_key
         )
 
         # Decrypt PDF file
