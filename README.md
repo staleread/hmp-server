@@ -1,1 +1,1 @@
-# HearMyPaper (Server)
+# HMP Server
