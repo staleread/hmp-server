@@ -86,4 +86,4 @@ jobs:
 
       - name: Trigger App Platform deployment
         run: |
-          doctl apps create-deployment "${{ steps.app.outputs.app_id }}" --force-redeploy
+          doctl apps create-deployment "${{ steps.app.outputs.app_id }}" --force-rebuild
