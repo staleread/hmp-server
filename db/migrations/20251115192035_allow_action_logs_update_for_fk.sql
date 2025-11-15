@@ -1,7 +1,8 @@
 -- migrate:up
 
--- Drop the old trigger and function
+-- Drop the old trigger first, then the function
 DROP TRIGGER IF EXISTS block_action_logs_update ON action_logs;
+DROP TRIGGER IF EXISTS block_action_logs_delete ON action_logs;
 DROP FUNCTION IF EXISTS prevent_action_logs_modification();
 
 -- Create new function that only prevents DELETE, allows UPDATE
