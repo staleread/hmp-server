@@ -46,7 +46,7 @@ def create_load_test_data(*, db: SqlRunner) -> LoadTestDataResponse:
             surname=f"Load{i:03d}",
             email=email,
             confidentiality_level=AccessLevel.CONTROLLED,
-            integrity_levels=[AccessLevel.CONTROLLED],
+            integrity_levels=[AccessLevel.RESTRICTED],
             public_key=public_key_bytes,
             expires_at=expires_at,
         )
