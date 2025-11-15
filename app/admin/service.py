@@ -159,11 +159,13 @@ def cleanup_load_test_data(*, db: SqlRunner) -> None:
         DELETE FROM projects WHERE title LIKE '$TEST$%'
     """).execute()
 
-    # Delete submissions from test users
+    # Delete submissions from test users via project_students
     db.query("""
         DELETE FROM submissions
-        WHERE author_id IN (
-            SELECT id FROM users WHERE email LIKE '%@hmp.test'
+        WHERE project_student_id IN (
+            SELECT ps.id FROM project_students ps
+            JOIN users u ON ps.student_id = u.id
+            WHERE u.email LIKE '%@hmp.test'
         )
     """).execute()
 
