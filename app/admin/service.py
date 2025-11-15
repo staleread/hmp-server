@@ -180,17 +180,7 @@ def cleanup_load_test_data(*, db: SqlRunner) -> None:
         DELETE FROM projects WHERE title LIKE '$TEST$%'
     """).execute()
 
-    # Temporarily disable action_logs trigger to allow user deletion
-    db.query("""
-        ALTER TABLE action_logs DISABLE TRIGGER block_action_logs_update
-    """).execute()
-
-    # Delete test users (this will SET NULL on action_logs.user_id via FK)
+    # Delete test users (FK will SET NULL on action_logs.user_id)
     db.query("""
         DELETE FROM users WHERE email LIKE '%@hmp.test'
-    """).execute()
-
-    # Re-enable action_logs trigger
-    db.query("""
-        ALTER TABLE action_logs ENABLE TRIGGER block_action_logs_update
     """).execute()
