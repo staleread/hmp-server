@@ -146,6 +146,27 @@ def cleanup_load_test_data(*, db: SqlRunner) -> None:
     Delete all test data created by create_load_test_data.
     Removes users with @hmp.test domain and projects with $TEST$ prefix.
     """
+    # Delete submissions for test projects (must be first due to FK constraints)
+    db.query("""
+        DELETE FROM submissions
+        WHERE project_student_id IN (
+            SELECT ps.id FROM project_students ps
+            WHERE ps.project_id IN (
+                SELECT id FROM projects WHERE title LIKE '$TEST$%'
+            )
+        )
+    """).execute()
+
+    # Delete submissions from test users
+    db.query("""
+        DELETE FROM submissions
+        WHERE project_student_id IN (
+            SELECT ps.id FROM project_students ps
+            JOIN users u ON ps.student_id = u.id
+            WHERE u.email LIKE '%@hmp.test'
+        )
+    """).execute()
+
     # Delete project_students assignments for test projects
     db.query("""
         DELETE FROM project_students
@@ -157,16 +178,6 @@ def cleanup_load_test_data(*, db: SqlRunner) -> None:
     # Delete test projects
     db.query("""
         DELETE FROM projects WHERE title LIKE '$TEST$%'
-    """).execute()
-
-    # Delete submissions from test users via project_students
-    db.query("""
-        DELETE FROM submissions
-        WHERE project_student_id IN (
-            SELECT ps.id FROM project_students ps
-            JOIN users u ON ps.student_id = u.id
-            WHERE u.email LIKE '%@hmp.test'
-        )
     """).execute()
 
     # Delete test users
