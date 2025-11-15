@@ -129,8 +129,10 @@ def create_load_test_data(*, db: SqlRunner) -> LoadTestDataResponse:
         student_project_ids = [p.id for p in selected_projects]
 
         # Assign student to each selected project
-        for project in selected_projects:
-            project_repo.assign_students_to_project(project.id, [student.id], db=db)
+        for selected_project in selected_projects:
+            project_repo.assign_students_to_project(
+                selected_project.id, [student.id], db=db
+            )
 
         student.project_ids = student_project_ids
 
