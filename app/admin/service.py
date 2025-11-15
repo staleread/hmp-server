@@ -122,19 +122,22 @@ def create_load_test_data(*, db: SqlRunner) -> LoadTestDataResponse:
         instructor.project_ids.append(project_id)
 
     # Assign students to projects (each student to 3-5 random projects)
+    # Build a mapping of project_id -> list of student_ids
+    project_students_map: dict[int, list[int]] = {p.id: [] for p in projects}
+
     for student in students:
         num_projects = random.randint(3, 5)
         selected_projects = random.sample(projects, num_projects)
 
-        student_project_ids = [p.id for p in selected_projects]
+        student.project_ids = [p.id for p in selected_projects]
 
-        # Assign student to each selected project
         for selected_project in selected_projects:
-            project_repo.assign_students_to_project(
-                selected_project.id, [student.id], db=db
-            )
+            project_students_map[selected_project.id].append(student.id)
 
-        student.project_ids = student_project_ids
+    # Now assign all students to each project in one call
+    for project_id, student_ids in project_students_map.items():
+        if student_ids:
+            project_repo.assign_students_to_project(project_id, student_ids, db=db)
 
     return LoadTestDataResponse(
         students=students, instructors=instructors, projects=projects
