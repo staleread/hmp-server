@@ -4,119 +4,22 @@
 
 The backend for [HearMyPaper](https://github.com/staleread/hearmypaper)
 
-## kubectl setup
+## Local development
 
-Install deps
-
-```bash
-sudo pacman -S minikube kubectl
-```
-
-Start `minikube`
+Install and start services via Docker Compose:
 
 ```bash
-minikube start
+docker compose up
 ```
 
-`kubectl` is now configured to use the minikube by default.
-
-Enable Ingress addon:
-
-```bash
-minikube addons enable ingress
-```
-
-Apply the manifests
-
-```bash
-kubectl apply -f k8s/
-```
-
-Check for the pods being started (run for a few times)
-
-```bash
-kubectl get pods
-```
-
-Get the IP address Ingress is listening to:
-
-```bash
-kubectl describe ingress hmp-ingress | grep Address
-```
-
-Open `http://<IP_address>/docs` in your browser. You should see OpenAPI docs
+The API will be available at `http://localhost:8000`. OpenAPI docs at `http://localhost:8000/docs`.
 
 ### Cleanup
 
 ```bash
-kubectl delete -f k8s/
+docker compose down -v
 ```
 
-## Helm setup
+## Deployment
 
-Install deps
-
-```bash
-sudo pacman -S helm
-```
-
-Apply the prerequisites (ConfigMap and Secret):
-
-```bash
-kubectl apply -f k8s/config.yaml
-kubectl apply -f k8s/secret.yaml
-```
-
-Pull chart dependencies (bitnami/postgresql, bitnami/redis):
-
-```bash
-helm dependency update helm/
-```
-
-Install the chart:
-
-```bash
-helm install hearmypaper helm/
-```
-
-Check for the pods being started (run a few times):
-
-```bash
-kubectl get pods
-```
-
-Get the IP address Ingress is listening to:
-
-```bash
-kubectl describe ingress hearmypaper | grep Address
-```
-
-Open `http://<IP_address>/docs` in your browser. You should see OpenAPI docs
-
-### Upgrade and rollback
-
-Change replica count (or any other value) without editing files:
-
-```bash
-helm upgrade hearmypaper helm/ --set replicaCount=2
-```
-
-Roll back to the previous revision:
-
-```bash
-helm rollback hearmypaper
-```
-
-List revision history:
-
-```bash
-helm history hearmypaper
-```
-
-### Cleanup
-
-```bash
-helm uninstall hearmypaper
-kubectl delete -f k8s/config.yaml
-kubectl delete -f k8s/secret.yaml
-```
+Kubernetes deployment is managed via Helm and ArgoCD. See the [infra repo](https://github.com/staleread/hmp-infra) for setup instructions.
