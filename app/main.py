@@ -22,7 +22,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, title="HearMyPaper API")
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(project_router, prefix="/project", tags=["project"])
