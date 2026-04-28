@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from redis import asyncio as aioredis  # type: ignore
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.auth.router import router as auth_router
 from app.project.router import router as project_router
@@ -23,6 +24,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan, title="HearMyPaper API")
+Instrumentator().instrument(app).expose(app)
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(project_router, prefix="/project", tags=["project"])
